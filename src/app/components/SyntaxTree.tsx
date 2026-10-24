@@ -1,49 +1,54 @@
-/** Compact AST view of the current expression, with the next redex outlined. */
-import { children, formatNumber, type Expr, type NodeId } from '../../lang';
+/**
+ * The current expression as one connected tree. Nodes are keyed by AST id, so a
+ * step only re-renders the path to the redex and the subtree it produced;
+ * everything else keeps its DOM node and its place.
+ */
+import { useMemo } from 'react';
+import type { ExecutionSnapshot } from '../../lang';
+import { deriveTreeView, type TreeNode } from '../model/tree';
 
-const MAX_DEPTH = 7;
+const MARK_TEXT = { redex: 'reduces next', changed: 'produced by the last step', error: 'stuck here' } as const;
 
-function label(expr: Expr): string {
-  switch (expr.kind) {
-    case 'Number': return formatNumber(expr.value);
-    case 'Boolean': return expr.value ? 'True' : 'False';
-    case 'Var': return expr.name;
-    case 'List': return `list [${expr.elements.length}]`;
-    case 'Lambda': return `λ${expr.param}`;
-    case 'App': return 'apply';
-    case 'Let': return `let ${expr.name}`;
-    case 'If': return 'if';
-    case 'Binary': return expr.op;
-    case 'Unary': return 'negate';
-  }
-}
-
-function Node({ expr, depth, redexId, changedId }: { expr: Expr; depth: number; redexId?: NodeId; changedId?: NodeId }) {
-  const kids = children(expr);
-  const cls = ['tree-label', `tree-${expr.kind.toLowerCase()}`];
-  if (expr.id === redexId) cls.push('m-redex');
-  if (expr.id === changedId) cls.push('m-changed');
+function TreeItem({ node }: { node: TreeNode }) {
+  const cls = ['tree-label', `tree-${node.kind.toLowerCase()}`, ...node.marks.map((m) => `m-${m}`)];
+  if (node.builtin) cls.push('tree-builtin');
+  if (node.isNew) cls.push('is-new');
+  const state = [...node.marks.map((m) => MARK_TEXT[m]), ...(node.isNew ? ['new'] : [])].join(', ');
   return (
-    <li>
-      <span className={cls.join(' ')}>{label(expr)}</span>
-      {kids.length > 0 &&
-        (depth >= MAX_DEPTH ? (
-          <ul><li><span className="muted">…</span></li></ul>
-        ) : (
-          <ul>
-            {kids.map((kid) => (
-              <Node key={kid.id} expr={kid} depth={depth + 1} redexId={redexId} changedId={changedId} />
-            ))}
-          </ul>
-        ))}
+    <li className={node.inChanged ? 'in-changed' : undefined}>
+      <span className={cls.join(' ')} title={node.detail}>
+        {node.label}
+      </span>
+      <span className="sr-only">
+        {' '}— {node.detail}
+        {state && ` (${state})`}
+      </span>
+      {(node.children.length > 0 || node.hidden > 0) && (
+        <ul>
+          {node.children.map((kid) => (
+            <TreeItem key={kid.id} node={kid} />
+          ))}
+          {node.hidden > 0 && <li className="tree-more muted">… {node.hidden} more node{node.hidden === 1 ? '' : 's'}</li>}
+        </ul>
+      )}
     </li>
   );
 }
 
-export function SyntaxTree({ expr, redexId, changedId }: { expr: Expr; redexId?: NodeId; changedId?: NodeId }) {
+export function SyntaxTree({ snapshot }: { readonly snapshot: ExecutionSnapshot }) {
+  const view = useMemo(() => deriveTreeView(snapshot), [snapshot]);
   return (
-    <ul className="tree" aria-label="Syntax tree">
-      <Node expr={expr} depth={0} redexId={redexId} changedId={changedId} />
-    </ul>
+    <div className="tree-view">
+      <ul className="tree" aria-label="Syntax tree">
+        <TreeItem node={view.root} />
+      </ul>
+      <ul className="legend tree-legend" aria-label="Syntax tree legend">
+        {view.hasRedex && <li><span className="swatch swatch-redex" />reduces next</li>}
+        {view.hasChange && <li><span className="swatch swatch-branch" />produced by the last step</li>}
+        {view.hasNew && <li><span className="swatch swatch-new" />new node; other nodes kept their identity</li>}
+        {view.hasError && <li><span className="swatch swatch-error" />stuck here</li>}
+      </ul>
+      {view.truncated && <p className="muted tree-note">Very large tree: deep or trailing parts are summarised as “… more nodes”.</p>}
+    </div>
   );
 }

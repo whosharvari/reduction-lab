@@ -258,11 +258,7 @@ export function App() {
                     </p>
                   )
                 ) : (
-                  <SyntaxTree
-                    expr={snapshot.current.expr}
-                    {...(snapshot.next ? { redexId: snapshot.next.redexId } : {})}
-                    {...(snapshot.current.step ? { changedId: snapshot.current.step.replacementId } : {})}
-                  />
+                  <SyntaxTree snapshot={snapshot} />
                 )}
                 </div>
               </section>
