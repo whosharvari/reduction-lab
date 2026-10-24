@@ -4,6 +4,11 @@ import { RULES } from '../model/visualization';
 
 /** Rows rendered around the current state; long traces are windowed. */
 const WINDOW = 150;
+/** Characters of each state shown in a row (rows are one line; huge states would cost layout time). */
+const PREVIEW_CHARS = 160;
+const TITLE_CHARS = 1000;
+
+const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
 
 interface HistoryPanelProps {
   readonly history: readonly HistoryEntry[];
@@ -52,13 +57,13 @@ export const HistoryPanel = memo(function HistoryPanel({ history, index, finishe
                 aria-current={isCurrent ? 'step' : undefined}
                 onClick={() => onSelect(entry.index)}
                 disabled={disabled}
-                title={entry.source}
+                title={clip(entry.source, TITLE_CHARS)}
               >
                 <span className="history-index">{entry.index}</span>
                 <span className={`rule-chip rule-${entry.step?.rule ?? 'start'}`}>
                   {entry.step ? RULES[entry.step.rule].symbol : 'start'}
                 </span>
-                <code className="history-source">{entry.source}</code>
+                <code className="history-source">{clip(entry.source, PREVIEW_CHARS)}</code>
               </button>
             </li>
           );

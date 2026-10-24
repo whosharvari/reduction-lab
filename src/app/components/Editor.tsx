@@ -3,7 +3,7 @@
  * <pre>, both using identical metrics. Highlighting uses the language's own
  * lexer, so it always matches what the parser accepts.
  */
-import { useMemo, useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import type { LangError } from '../../lang';
 import { buildSegments } from '../model/highlight';
 import { Segments } from './CodeView';
@@ -16,7 +16,8 @@ interface EditorProps {
   readonly error?: LangError;
 }
 
-export function Editor({ value, onChange, onSubmit, error }: EditorProps) {
+/** Memoised: stepping re-renders the app often, and the editor's content does not change then. */
+export const Editor = memo(function Editor({ value, onChange, onSubmit, error }: EditorProps) {
   const overlay = useRef<HTMLPreElement>(null);
   const gutter = useRef<HTMLDivElement>(null);
 
@@ -71,4 +72,4 @@ export function Editor({ value, onChange, onSubmit, error }: EditorProps) {
       </div>
     </div>
   );
-}
+});

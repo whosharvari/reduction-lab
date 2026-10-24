@@ -10,6 +10,8 @@ interface ControlsProps {
   /** Run the editor's code to completion. */
   readonly onRun: () => void;
   readonly dirty: boolean;
+  /** False when the edited code has a syntax error (Run would discard the current history). */
+  readonly canRunEdited: boolean;
 }
 
 export function statusOf(snapshot: ExecutionSnapshot | undefined, activity: Activity) {
@@ -21,7 +23,7 @@ export function statusOf(snapshot: ExecutionSnapshot | undefined, activity: Acti
   return { label: snapshot.index === 0 ? 'Ready' : 'Stepping', tone: 'idle' } as const;
 }
 
-export function Controls({ snapshot, activity, actions, onRestart, onRun, dirty }: ControlsProps) {
+export function Controls({ snapshot, activity, actions, onRestart, onRun, dirty, canRunEdited }: ControlsProps) {
   const busy = activity !== 'idle';
   const canBack = !!snapshot?.canGoBack;
   const canForward = !!snapshot?.canGoForward;
@@ -46,9 +48,15 @@ export function Controls({ snapshot, activity, actions, onRestart, onRun, dirty 
             Play
           </button>
         )}
-        <button type="button" className="btn" onClick={onRun} disabled={busy || (!canForward && !dirty)} aria-keyshortcuts="End">
-          Run to end
-        </button>
+        {activity === 'running' ? (
+          <button type="button" className="btn" onClick={actions.pause}>
+            Stop
+          </button>
+        ) : (
+          <button type="button" className="btn" onClick={onRun} disabled={busy || !canRunEdited || (!canForward && !dirty)} aria-keyshortcuts="End">
+            Run to end
+          </button>
+        )}
       </div>
       <div className="controls-group">
         <button type="button" className="btn btn-ghost" onClick={actions.reset} disabled={!snapshot || snapshot.index === 0} aria-keyshortcuts="Home">

@@ -90,6 +90,22 @@ Strict, call-by-value, left to right:
 - `[e1, …, en]`: evaluate elements left to right.
 - `let x = e in b`: evaluate `e`, bind, then evaluate `b`.
 
+## Numbers
+
+Numbers are IEEE-754 doubles. How results print:
+
+- **No exponent notation for finite values.** Every finite result is written in a form the
+  lexer can read back.
+  - Integers print exactly: `1e24` prints as `999999999999999983222784`, its exact double value.
+  - Non-integers print to 12 significant digits, so `0.1 + 0.2` shows `0.3`. Tiny values
+    are written out in full (`0.0000001`). Re-reading a printed non-integer gives that
+    displayed value.
+- **`-0` prints as `0`.** The language can't tell them apart: `0 == -0` is `True`, and
+  dividing by either is an error.
+- **`Infinity` and `NaN`** can only come from overflow (e.g. repeated multiplication), and
+  `NaN` from operations like `Infinity - Infinity`. They print as `Infinity` / `NaN`, which
+  have no literal syntax (re-read, they would be variable names). `NaN == NaN` is `False`.
+
 ## Operators
 
 - `+ - * /` take numbers. `/` is real division (`7 / 2` is `3.5`).
@@ -145,10 +161,10 @@ Every error has a kind, a message, and (when known) a source span (offsets plus 
 
 | Kind           | Raised when | Example |
 |----------------|-------------|---------|
-| `SyntaxError`  | Bad character, unexpected token, unclosed bracket, empty program, duplicate parameter, chained comparison | `(1 + 2`, `1 < 2 < 3` |
+| `SyntaxError`  | Bad character, unexpected token, unclosed bracket, empty program, duplicate parameter, chained comparison, nesting deeper than 300 levels, or a syntax tree deeper than 1000 levels | `(1 + 2`, `1 < 2 < 3` |
 | `NameError`    | A variable is evaluated but not bound in scope. Suggests a close match. | `mapp f xs` gives `Did you mean 'map'?` |
 | `TypeError`    | Applying a non-function; operator or built-in given the wrong kind of value; non-boolean `if` condition | `5 3`, `1 + True`, `map 5 [1]` |
-| `RuntimeError` | Division by zero; evaluation deeper than the depth limit (default 2000); reduction longer than 10,000 steps or larger than 50,000 nodes | `1 / 0`, `(\x -> x x) (\x -> x x)` |
+| `RuntimeError` | Division by zero; evaluation deeper than the depth limit (default 2000); reduction longer than 10,000 steps, larger than 50,000 nodes, or deeper than 1000 levels | `1 / 0`, `(\x -> x x) (\x -> x x)` |
 
 Errors are raised when the offending expression is *evaluated*. An unused
 undefined variable inside a lambda body that never runs is not an error.

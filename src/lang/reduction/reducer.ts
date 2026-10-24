@@ -51,6 +51,17 @@ function isPartialBuiltin(expr: Expr): boolean {
  * free, because bound ones have been substituted away.)
  */
 export function isValue(expr: Expr): boolean {
+  // Immutable nodes are shared between steps, so the answer can be cached per node.
+  const cached = valueCache.get(expr);
+  if (cached !== undefined) return cached;
+  const result = computeIsValue(expr);
+  valueCache.set(expr, result);
+  return result;
+}
+
+const valueCache = new WeakMap<Expr, boolean>();
+
+function computeIsValue(expr: Expr): boolean {
   switch (expr.kind) {
     case 'Number':
     case 'Boolean':
@@ -97,8 +108,22 @@ interface Redex {
   readonly list?: ListRef;
 }
 
-function findRedex(expr: Expr, path: Path): Redex | undefined {
-  const here: Redex = { path, node: expr };
+/**
+ * `path` is a shared, mutable stack of the segments leading to `expr`; it is
+ * copied only when a redex is found, so descending is O(depth) per step
+ * rather than O(depth²).
+ */
+function findRedex(expr: Expr, path: PathSegment[]): Redex | undefined {
+  // Values contain no redex. `isValue` is cached per node, so already-reduced
+  // sub-trees (e.g. a large accumulator) are skipped in O(1) on every step.
+  if (isValue(expr)) return undefined;
+  const here = (): Redex => ({ path: [...path], node: expr });
+  const into = (segment: PathSegment, child: Expr): Redex | undefined => {
+    path.push(segment);
+    const found = findRedex(child, path);
+    path.pop();
+    return found;
+  };
   switch (expr.kind) {
     case 'Number':
     case 'Boolean':
@@ -106,30 +131,26 @@ function findRedex(expr: Expr, path: Path): Redex | undefined {
       return undefined;
     case 'Var':
       // A free non-builtin variable is "stuck"; contract() reports the NameError.
-      return isBuiltinName(expr.name) ? undefined : here;
+      return isBuiltinName(expr.name) ? undefined : here();
     case 'List':
       for (let i = 0; i < expr.elements.length; i++) {
-        const found = findRedex(expr.elements[i]!, [...path, ['elements', i]]);
-        if (found) return found.list ? found : { ...found, list: { listPath: path, listId: expr.id, index: i } };
+        const found = into(['elements', i], expr.elements[i]!);
+        if (found) return found.list ? found : { ...found, list: { listPath: [...path], listId: expr.id, index: i } };
       }
       return undefined;
     case 'App':
-      return (
-        findRedex(expr.fn, [...path, 'fn']) ??
-        findRedex(expr.arg, [...path, 'arg']) ??
-        (isPartialBuiltin(expr) ? undefined : here)
-      );
+      return into('fn', expr.fn) ?? into('arg', expr.arg) ?? (isPartialBuiltin(expr) ? undefined : here());
     case 'Let':
-      return findRedex(expr.value, [...path, 'value']) ?? here;
+      return into('value', expr.value) ?? here();
     case 'If':
-      return findRedex(expr.cond, [...path, 'cond']) ?? here;
+      return into('cond', expr.cond) ?? here();
     case 'Unary':
-      return findRedex(expr.operand, [...path, 'operand']) ?? here;
+      return into('operand', expr.operand) ?? here();
     case 'Binary': {
-      const inLeft = findRedex(expr.left, [...path, 'left']);
+      const inLeft = into('left', expr.left);
       if (inLeft) return inLeft;
-      if ((expr.op === '&&' || expr.op === '||') && shortCircuits(expr)) return here;
-      return findRedex(expr.right, [...path, 'right']) ?? here;
+      if ((expr.op === '&&' || expr.op === '||') && shortCircuits(expr)) return here();
+      return into('right', expr.right) ?? here();
     }
   }
 }
@@ -394,11 +415,13 @@ function foldFocus(rule: ReductionRule, path: Path, before: Expr, after: Expr, r
 export class SmallStepReducer implements Reducer {
   /** Shared across steps so an id, once retired, is never reissued in this reducer's history. */
   private readonly ids = new IdGenerator();
+  /** The last tree this reducer produced: its ids all came from `ids`, so no rescan is needed. */
+  private lastOutput: Expr | undefined;
 
   step(expr: Expr): StepResult {
     const redex = findRedex(expr, []);
     if (!redex) return { status: 'done', expr };
-    this.ids.reserveAbove(expr);
+    if (expr !== this.lastOutput) this.ids.reserveAbove(expr);
     try {
       const { rule, description, replacement } = new Contractor(this.ids).contract(redex.node);
       const after = replaceAt(expr, redex.path, replacement);
@@ -415,6 +438,7 @@ export class SmallStepReducer implements Reducer {
         ...(redex.list ? { listFocus: listFocus(redex.list, expr, after) } : {}),
         ...(fold ? { foldFocus: fold } : {}),
       };
+      this.lastOutput = after;
       return { status: 'step', step };
     } catch (error) {
       if (!(error instanceof LangError)) throw error;

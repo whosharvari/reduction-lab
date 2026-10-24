@@ -138,8 +138,17 @@ run.runToCompletion();       // { status: 'done', expr: 6 }, bounded by maxSteps
 
 ## Known limitations
 
-- **UI limits.** The UI caps a run at 5,000 steps and 20,000 nodes (the engine defaults
-  are 10,000 and 50,000). Diverging programs stop with a RuntimeError.
+- **Limits.**
+  - The parser rejects nesting deeper than 300 levels, and syntax trees deeper than
+    1000 levels, with a SyntaxError.
+  - A reduction stops with a RuntimeError past 1000 levels of depth. It also stops past
+    5,000 steps or 20,000 nodes in the UI (10,000 and 50,000 in the engine).
+  - **Run to end** becomes **Stop** while it runs.
+- **Large expressions.** States longer than 2,500 characters drop syntax colouring, but
+  their redex and element highlights stay exact. Inspector and rewrite previews are
+  clipped. Each step costs time linear in the expression's size, so a pathological
+  program (for example, folding a 1,200-element list into a 1000-level nested list)
+  takes tens of seconds. The UI stays responsive while it runs.
 - **History windowing.** The History panel shows 150 states either side of the current
   one in long traces. The controller still holds all of them.
 - **The editor is simple.** It's a textarea with a highlighted overlay and line numbers.

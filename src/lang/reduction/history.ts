@@ -8,7 +8,7 @@
  * history, and are bounded by `maxSteps` / `maxNodes` so a diverging program
  * can never freeze the caller.
  */
-import { countNodes, type Application, type Expr, type NodeId } from '../ast';
+import { countNodes, exprDepth, type Application, type Expr, type NodeId } from '../ast';
 import { runtimeError } from '../errors';
 import { parse } from '../parser';
 import { nodeAt, type Path } from '../paths';
@@ -21,10 +21,16 @@ export interface ExecutionOptions {
   readonly maxSteps?: number;
   /** Stop with a RuntimeError once the expression grows beyond this many nodes. */
   readonly maxNodes?: number;
+  /** Stop with a RuntimeError once the expression tree grows deeper than this. */
+  readonly maxDepth?: number;
 }
 
 export const DEFAULT_MAX_STEPS = 10_000;
 export const DEFAULT_MAX_NODES = 50_000;
+export const DEFAULT_MAX_TREE_DEPTH = 1000;
+
+const tooDeep = (expr: Expr) =>
+  runtimeError('The expression became too deeply nested to reduce safely', expr.span);
 
 export interface HistoryEntry {
   /** 0 for the initial state, n after n steps. */
@@ -125,11 +131,18 @@ export class ExecutionController {
   private readonly origins = new OriginTracker();
   private readonly maxSteps: number;
   private readonly maxNodes: number;
+  private readonly maxDepth: number;
 
   constructor(initial: Expr, options: ExecutionOptions = {}) {
     this.maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
     this.maxNodes = options.maxNodes ?? DEFAULT_MAX_NODES;
+    this.maxDepth = options.maxDepth ?? DEFAULT_MAX_TREE_DEPTH;
     this.reducer = new SmallStepReducer();
+    if (exprDepth(initial) > this.maxDepth) {
+      this.entries = [{ index: 0, expr: initial, source: '' }];
+      this.terminal = { status: 'error', expr: initial, error: tooDeep(initial) };
+      return;
+    }
     this.entries = [{ index: 0, expr: initial, source: printExpr(initial) }];
     if (isValue(initial)) this.terminal = { status: 'done', expr: initial };
   }
@@ -233,6 +246,7 @@ export class ExecutionController {
 
   /** Jump to state `index` (clamped), discovering steps as needed. */
   goTo(index: number): HistoryEntry {
+    if (Number.isNaN(index)) return this.current;
     const target = Math.max(0, Math.floor(index));
     this.discover(target);
     this.cursor = Math.min(target, this.entries.length - 1);
@@ -261,6 +275,16 @@ export class ExecutionController {
 
   private extend(): void {
     const last = this.entries.at(-1)!;
+    try {
+      this.extendFrom(last);
+    } catch (error) {
+      // Last-resort guard: a stack overflow must end the trace, not crash the caller.
+      if (!(error instanceof RangeError)) throw error;
+      this.terminal = { status: 'error', expr: last.expr, error: tooDeep(last.expr) };
+    }
+  }
+
+  private extendFrom(last: HistoryEntry): void {
     const result = this.reducer.step(last.expr);
     if (result.status !== 'step') {
       this.terminal = result;
@@ -271,6 +295,15 @@ export class ExecutionController {
         status: 'error',
         expr: last.expr,
         error: runtimeError(`Reduction did not finish within ${this.maxSteps} steps (possible infinite loop)`, last.expr.span),
+      };
+      return;
+    }
+    if (exprDepth(result.step.after) > this.maxDepth) {
+      // Not recorded: deeper trees risk overflowing the printer and the renderer.
+      this.terminal = {
+        status: 'error',
+        expr: last.expr,
+        error: runtimeError(`The expression grew deeper than ${this.maxDepth} levels`, last.expr.span),
       };
       return;
     }

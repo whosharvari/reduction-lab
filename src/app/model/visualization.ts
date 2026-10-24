@@ -88,7 +88,11 @@ export function deriveMapView({ history, index, next, failure }: Position): MapV
     return { phase: 'expanding', fn, elements: inputs.map((input, i) => ({ index: i, input, status: 'pending' })) };
   }
 
-  // The most recent map expansion whose list is still part of the current expression.
+  // Map expansions whose lists are still part of the current expression, most recent first.
+  // Prefer the innermost one containing the next redex (e.g. the outer list of a nested map
+  // once its inner map has finished); otherwise the most recent one.
+  const candidates: MapView[] = [];
+  let containing: { view: MapView; depth: number } | undefined;
   for (let k = index; k >= 1; k--) {
     const step = history[k]!.step!;
     if (step.rule !== 'map') continue;
@@ -111,15 +115,18 @@ export function deriveMapView({ history, index, next, failure }: Position): MapV
       status: i === failedIndex ? 'error' : i === activeIndex ? 'active' : isValue(element) ? 'done' : 'pending',
     }));
     const complete = elements.every((e) => e.status === 'done');
-    return {
+    const view: MapView = {
       phase: complete ? 'complete' : 'processing',
       fn,
       listId: list.id,
       elements,
       ...(activeIndex !== undefined ? { activeIndex } : {}),
     };
+    candidates.push(view);
+    const holdsRedex = activeIndex !== undefined || elementIndexOf(failure?.path, listPath) !== undefined;
+    if (holdsRedex && (!containing || listPath.length > containing.depth)) containing = { view, depth: listPath.length };
   }
-  return undefined;
+  return containing?.view ?? candidates[0];
 }
 
 // ---- fold -------------------------------------------------------------------

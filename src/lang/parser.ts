@@ -21,6 +21,7 @@
  * `let`, lambda and `if` extend as far to the right as possible, as in Haskell.
  */
 import {
+  exprDepth,
   IdGenerator,
   type BinaryOperator,
   type ComparisonOperator,
@@ -37,13 +38,27 @@ const ATOM_START: ReadonlySet<TokenType> = new Set<TokenType>([
   'number', 'ident', 'True', 'False', '(', '[',
 ]);
 
+/**
+ * Limits that keep every later stage (printer, reducer, UI) well inside the
+ * JavaScript call stack. Exceeding either is a SyntaxError, never a crash.
+ */
+/** Nested sub-expressions the recursive-descent parser will enter (parentheses, lets, lambdas, unary minus…). */
+export const MAX_NESTING = 300;
+/** Maximum height of the resulting syntax tree (long operator chains also count). */
+export const MAX_TREE_DEPTH = 1000;
+
 export interface ParseOptions {
   /** Supply a generator to continue an existing id sequence. */
   readonly ids?: IdGenerator;
 }
 
 export function parse(source: string, options: ParseOptions = {}): Expr {
-  return new Parser(tokenize(source), options.ids ?? new IdGenerator()).parseProgram();
+  const expr = new Parser(tokenize(source), options.ids ?? new IdGenerator()).parseProgram();
+  const depth = exprDepth(expr);
+  if (depth > MAX_TREE_DEPTH) {
+    throw syntaxError(`The program is too deeply nested (${depth} levels; the limit is ${MAX_TREE_DEPTH})`, expr.span);
+  }
+  return expr;
 }
 
 function describe(token: Token): string {
@@ -66,6 +81,7 @@ function join(from: Span, to: Span): Span {
 
 class Parser {
   private pos = 0;
+  private nesting = 0;
   private readonly tokens: Token[];
   private readonly ids: IdGenerator;
 
@@ -81,7 +97,11 @@ class Parser {
     const expr = this.parseExpr();
     const next = this.peek();
     if (next.type !== 'eof') {
-      throw syntaxError(`Unexpected ${describe(next)} after the end of the expression`, next.span);
+      const hint =
+        next.type === '\\' || next.type === 'let' || next.type === 'if'
+          ? `. To pass a ${next.type === '\\' ? 'lambda' : `'${next.type}' expression`} as an argument, wrap it in parentheses`
+          : '';
+      throw syntaxError(`Unexpected ${describe(next)} after the end of the expression${hint}`, next.span);
     }
     return expr;
   }
@@ -125,19 +145,39 @@ class Parser {
   // ---- grammar -------------------------------------------------------------
 
   private parseExpr(): Expr {
-    return this.parseOr();
+    return this.nested(() => this.parseOr());
+  }
+
+  /** Track recursion depth so pathological input is a SyntaxError, not a stack overflow. */
+  private nested<T>(parse: () => T): T {
+    if (++this.nesting > MAX_NESTING) {
+      throw syntaxError(`The program is nested too deeply (more than ${MAX_NESTING} levels)`, this.peek().span);
+    }
+    try {
+      return parse();
+    } finally {
+      this.nesting--;
+    }
   }
 
   private parseOr(): Expr {
-    const left = this.parseAnd();
-    if (!this.match('||')) return left;
-    return this.binary('||', left, this.parseOr());
+    return this.rightAssociative('||', () => this.parseAnd());
   }
 
   private parseAnd(): Expr {
-    const left = this.parseCompare();
-    if (!this.match('&&')) return left;
-    return this.binary('&&', left, this.parseAnd());
+    return this.rightAssociative('&&', () => this.parseCompare());
+  }
+
+  /**
+   * `a op b op c` as `a op (b op c)`. Operands are collected in a loop and folded
+   * from the right, so a long chain cannot overflow the stack while parsing.
+   */
+  private rightAssociative(op: '||' | '&&', operand: () => Expr): Expr {
+    const operands = [operand()];
+    while (this.match(op)) operands.push(operand());
+    let result = operands.pop()!;
+    while (operands.length > 0) result = this.binary(op, operands.pop()!, result);
+    return result;
   }
 
   private parseCompare(): Expr {
@@ -181,7 +221,7 @@ class Parser {
     switch (token.type) {
       case '-': {
         this.nextToken();
-        const operand = this.parseUnary();
+        const operand = this.nested(() => this.parseUnary());
         return { kind: 'Unary', id: this.ids.next(), span: join(token.span, operand.span), op: '-', operand };
       }
       case 'let':

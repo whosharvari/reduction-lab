@@ -80,6 +80,9 @@ function markComments(text: string, classes: Array<TokenClass | undefined>, from
   }
 }
 
+/** Above this many characters, syntax colouring is skipped (marks are still exact). */
+export const MAX_SYNTAX_CHARS = 2500;
+
 /** Split `text` into maximal runs with the same token class and marks. */
 export function buildSegments(
   text: string,
@@ -87,7 +90,9 @@ export function buildSegments(
   marks: ReadonlyArray<readonly [NodeId | undefined, Mark]>,
   extraRanges: ReadonlyArray<readonly [TextRange, Mark]> = [],
 ): Segment[] {
-  const tokens = tokenClasses(text);
+  // Colouring every token of a huge expression creates thousands of DOM nodes per render.
+  const tokens: Array<TokenClass | undefined> =
+    text.length > MAX_SYNTAX_CHARS ? new Array(text.length).fill(undefined) : tokenClasses(text);
   const perChar: Mark[][] = Array.from({ length: text.length }, () => []);
   const apply = (range: TextRange | undefined, mark: Mark) => {
     if (!range) return;

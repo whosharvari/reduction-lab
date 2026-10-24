@@ -2,8 +2,8 @@
  * Reduction Lab workspace. All execution goes through the language engine's
  * ExecutionController (via useExecution); the UI only renders its snapshots.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { isLangError, parse, type LangError } from '../lang';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { isLangError, parse, runtimeError, type LangError } from '../lang';
 import { Controls } from './components/Controls';
 import { Editor } from './components/Editor';
 import { HistoryPanel } from './components/HistoryPanel';
@@ -31,7 +31,7 @@ function syntaxErrorOf(source: string): LangError | undefined {
     return undefined;
   } catch (error) {
     if (isLangError(error)) return error;
-    throw error;
+    return runtimeError(`Internal error: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -60,7 +60,15 @@ export function App() {
   const foldView = useMemo(() => position && deriveFoldView(position), [position]);
 
   const restart = () => actions.load(code);
-  const runAll = () => actions.run(code);
+  // Stable identity so the memoised editor does not re-render on every step.
+  const restartRef = useRef(restart);
+  restartRef.current = restart;
+  const submitFromEditor = useCallback(() => restartRef.current(), []);
+  // Running edited code that does not parse would throw away a valid history; the editor already shows the error.
+  const canRunEdited = !(dirty && liveError);
+  const runAll = () => {
+    if (canRunEdited) actions.run(code);
+  };
 
   const selectExample = (next: Example) => {
     setExample(next);
@@ -149,6 +157,7 @@ export function App() {
                     type="button"
                     className={`example${ex.id === example.id ? ' is-selected' : ''}`}
                     aria-pressed={ex.id === example.id}
+                    aria-label={`${ex.title} (${ex.concept})`}
                     onClick={() => selectExample(ex)}
                   >
                     <span className="example-title">{ex.title}</span>
@@ -174,7 +183,7 @@ export function App() {
             <p className="example-explanation">
               <span className="example-concept">{example.concept}</span> {example.explanation}
             </p>
-            <Editor value={code} onChange={setCode} onSubmit={restart} {...(liveError ? { error: liveError } : {})} />
+            <Editor value={code} onChange={setCode} onSubmit={submitFromEditor} {...(liveError ? { error: liveError } : {})} />
             {liveError ? (
               <pre className="error-box" id="editor-error" role="alert">
                 {liveError.format(code)}
@@ -194,7 +203,15 @@ export function App() {
         </div>
 
         <div className="col col-main">
-          <Controls snapshot={snapshot} activity={activity} actions={actions} onRestart={restart} onRun={runAll} dirty={dirty} />
+          <Controls
+            snapshot={snapshot}
+            activity={activity}
+            actions={actions}
+            onRestart={restart}
+            onRun={runAll}
+            dirty={dirty}
+            canRunEdited={canRunEdited}
+          />
 
           {snapshot ? (
             <>
@@ -204,14 +221,31 @@ export function App() {
                 <header className="panel-header">
                   <h2 id="viz-title">Visualise</h2>
                   <div className="tabs" role="tablist" aria-label="Visualisation">
-                    <button type="button" role="tab" aria-selected={vizTab === 'list'} className="tab" onClick={() => setVizTab('list')}>
+                    <button
+                      type="button"
+                      role="tab"
+                      id="tab-list"
+                      aria-controls="viz-panel"
+                      aria-selected={vizTab === 'list'}
+                      className="tab"
+                      onClick={() => setVizTab('list')}
+                    >
                       Lists
                     </button>
-                    <button type="button" role="tab" aria-selected={vizTab === 'tree'} className="tab" onClick={() => setVizTab('tree')}>
+                    <button
+                      type="button"
+                      role="tab"
+                      id="tab-tree"
+                      aria-controls="viz-panel"
+                      aria-selected={vizTab === 'tree'}
+                      className="tab"
+                      onClick={() => setVizTab('tree')}
+                    >
                       Syntax tree
                     </button>
                   </div>
                 </header>
+                <div id="viz-panel" role="tabpanel" aria-labelledby={vizTab === 'list' ? 'tab-list' : 'tab-tree'}>
                 {vizTab === 'list' ? (
                   hasListViz ? (
                     <div className="viz-stack">
@@ -230,6 +264,7 @@ export function App() {
                     {...(snapshot.current.step ? { changedId: snapshot.current.step.replacementId } : {})}
                   />
                 )}
+                </div>
               </section>
             </>
           ) : (

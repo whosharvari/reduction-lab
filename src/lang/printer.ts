@@ -29,7 +29,7 @@ const BINARY_PREC: Record<BinaryOperator, number> = {
 export function precedence(expr: Expr): number {
   switch (expr.kind) {
     case 'Number':
-      return expr.value < 0 || Object.is(expr.value, -0) ? PREC.unary : PREC.atom;
+      return expr.value < 0 ? PREC.unary : PREC.atom;
     case 'Boolean':
     case 'Var':
     case 'List':
@@ -47,10 +47,27 @@ export function precedence(expr: Expr): number {
   }
 }
 
+/**
+ * Render a number the way the lexer can read it back: no exponent notation for
+ * finite values. `-0` prints as `0` (the two are indistinguishable in the
+ * language: `==` treats them as equal and dividing by either is an error).
+ * Infinity and NaN have no literal syntax and print as `Infinity` / `NaN`.
+ */
 export function formatNumber(n: number): string {
-  if (Number.isInteger(n)) return String(n);
-  // Trim binary-float noise such as 0.1 + 0.2 = 0.30000000000000004.
-  return String(Number(n.toPrecision(12)));
+  if (Object.is(n, -0)) return '0';
+  if (!Number.isFinite(n)) return String(n);
+  if (Number.isInteger(n)) return Math.abs(n) < 1e21 ? String(n) : BigInt(n).toString();
+  // Display non-integers to 12 significant digits, trimming binary-float noise
+  // such as 0.1 + 0.2 = 0.30000000000000004.
+  const rounded = Number(n.toPrecision(12));
+  const text = String(rounded);
+  if (!text.includes('e')) return text;
+  // Tiny magnitudes (e.g. 1e-7, 5e-324): write the digits out in full. Built from
+  // the exponent form rather than toFixed(), which is capped at 100 decimals.
+  const [mantissa, exponent] = rounded.toExponential().split('e') as [string, string];
+  const sign = mantissa.startsWith('-') ? '-' : '';
+  const digits = mantissa.replace('-', '').replace('.', '');
+  return `${sign}0.${'0'.repeat(-Number(exponent) - 1)}${digits}`;
 }
 
 export function printExpr(expr: Expr): string {
@@ -96,7 +113,7 @@ class Writer {
   private printBare(expr: Expr): void {
     switch (expr.kind) {
       case 'Number':
-        return this.emit(Object.is(expr.value, -0) ? '-0' : formatNumber(expr.value));
+        return this.emit(formatNumber(expr.value));
       case 'Boolean':
         return this.emit(expr.value ? 'True' : 'False');
       case 'Var':

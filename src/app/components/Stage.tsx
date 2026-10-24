@@ -6,6 +6,8 @@ import { nodeAt, printExpr, type ExecutionSnapshot, type HistoryEntry } from '..
 import { RULES, rewriteOf } from '../model/visualization';
 import { CodeView, type MarkList } from './CodeView';
 
+const PREVIEW_CHARS = 240;
+
 export function Stage({ snapshot }: { readonly snapshot: ExecutionSnapshot }) {
   const { current, next } = snapshot;
   const last = current.step;
@@ -32,7 +34,7 @@ export function Stage({ snapshot }: { readonly snapshot: ExecutionSnapshot }) {
         </ul>
       </header>
 
-      <div className="stage-expr" key={current.index}>
+      <div className="stage-expr">
         <CodeView expr={current.expr} marks={marks} label="Expression being reduced" className="code-xl" />
       </div>
 
@@ -80,9 +82,9 @@ function LastRewrite({ entry }: { readonly entry: HistoryEntry }) {
         <CodeView expr={step.before} marks={[[step.redexId, 'redex']]} label="Expression before the latest step" />
         <span className="rewrite-label">Rewrite</span>
         <span className="rewrite-pair">
-          <CodeView expr={before} className="code-redex" label="Redex" />
+          <CodeView expr={before} className="code-redex" label="Redex" maxChars={PREVIEW_CHARS} />
           <span className="arrow" aria-hidden="true">⟶</span>
-          <CodeView expr={after} className="code-changed" label="Replacement" />
+          <CodeView expr={after} className="code-changed" label="Replacement" maxChars={PREVIEW_CHARS} />
         </span>
       </div>
     </div>

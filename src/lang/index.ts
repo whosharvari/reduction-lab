@@ -24,7 +24,7 @@ import { formatValue, type Value } from './values';
 export * from './ast';
 export * from './errors';
 export { tokenize, type Token, type TokenType } from './lexer';
-export { parse, type ParseOptions } from './parser';
+export { parse, MAX_NESTING, MAX_TREE_DEPTH, type ParseOptions } from './parser';
 export { evaluate, DEFAULT_MAX_DEPTH, type EvalOptions } from './evaluator';
 export { Environment } from './environment';
 export { BUILTINS, createGlobalEnvironment, type BuiltinDefinition } from './builtins';

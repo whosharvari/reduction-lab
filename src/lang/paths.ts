@@ -37,11 +37,16 @@ export function nodeAt(root: Expr, path: Path): Expr | undefined {
 }
 
 export function replaceAt(root: Expr, path: Path, replacement: Expr): Expr {
-  if (path.length === 0) return replacement;
-  const [head, ...rest] = path as [PathSegment, ...PathSegment[]];
+  return replaceFrom(root, path, 0, replacement);
+}
+
+/** Index-based so a deep path is not re-sliced at every level (O(depth), not O(depth²)). */
+function replaceFrom(root: Expr, path: Path, at: number, replacement: Expr): Expr {
+  if (at === path.length) return replacement;
+  const head = path[at]!;
   const target = child(root, head);
   if (!target) throw new Error(`Invalid path segment ${JSON.stringify(head)} for ${root.kind} node`);
-  const updated = replaceAt(target, rest, replacement);
+  const updated = replaceFrom(target, path, at + 1, replacement);
   if (Array.isArray(head)) {
     const list = root as Extract<Expr, { kind: 'List' }>;
     const elements = list.elements.slice();

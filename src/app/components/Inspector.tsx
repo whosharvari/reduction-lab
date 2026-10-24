@@ -7,6 +7,9 @@ import type { FoldView, MapView } from '../model/visualization';
 import { RULES, rewriteOf } from '../model/visualization';
 import { CodeView } from './CodeView';
 
+/** Inspector previews are clipped; the full expression is always on the stage. */
+const PREVIEW_CHARS = 240;
+
 interface InspectorProps {
   readonly snapshot: ExecutionSnapshot;
   readonly mapView?: MapView;
@@ -44,9 +47,9 @@ function StepBody({ step }: { step: ReductionStep }) {
       </p>
       <dl className="kv">
         <dt>Redex</dt>
-        <dd><CodeView expr={before} className="code-redex" /></dd>
+        <dd><CodeView expr={before} className="code-redex" maxChars={PREVIEW_CHARS} /></dd>
         <dt>Becomes</dt>
-        <dd><CodeView expr={after} className="code-changed" /></dd>
+        <dd><CodeView expr={after} className="code-changed" maxChars={PREVIEW_CHARS} /></dd>
         {step.listFocus && (
           <>
             <dt>List element</dt>
@@ -77,9 +80,9 @@ function StepBody({ step }: { step: ReductionStep }) {
             </dd>
             <dt>Accumulator</dt>
             <dd className="rewrite-pair">
-              <CodeView expr={step.foldFocus.accumulatorBefore} />
+              <CodeView expr={step.foldFocus.accumulatorBefore} maxChars={PREVIEW_CHARS} />
               <span className="arrow" aria-hidden="true">⟶</span>
-              <CodeView expr={step.foldFocus.accumulatorAfter} className="code-changed" />
+              <CodeView expr={step.foldFocus.accumulatorAfter} className="code-changed" maxChars={PREVIEW_CHARS} />
             </dd>
           </>
         )}
@@ -109,7 +112,7 @@ export function Inspector({ snapshot, mapView, foldView }: InspectorProps) {
       {snapshot.status === 'done' && (
         <section className="inspector-section" aria-label="Result">
           <h3>Result</h3>
-          <CodeView expr={current.expr} className="code-lg" label="Final value" />
+          <CodeView expr={current.expr} className="code-lg" label="Final value" maxChars={2000} />
         </section>
       )}
 

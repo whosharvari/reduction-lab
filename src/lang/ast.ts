@@ -159,9 +159,6 @@ export function mapChildren(expr: Expr, f: (child: Expr) => Expr): Expr {
   }
 }
 
-export function countNodes(expr: Expr): number {
-  return children(expr).reduce((sum, child) => sum + countNodes(child), 1);
-}
 
 /** Every identifier appearing in `expr`, bound or free. */
 export function allNames(expr: Expr, into: Set<string> = new Set()): Set<string> {
@@ -172,30 +169,79 @@ export function allNames(expr: Expr, into: Set<string> = new Set()): Set<string>
   return into;
 }
 
-export function maxNodeId(expr: Expr): NodeId {
-  return children(expr).reduce((max, child) => Math.max(max, maxNodeId(child)), expr.id);
-}
+
 
 /** Variables that occur free in `expr` (needed for capture-avoiding substitution). */
-export function freeVariables(expr: Expr): Set<string> {
-  const free = new Set<string>();
-  const walk = (e: Expr, bound: ReadonlySet<string>): void => {
-    switch (e.kind) {
+export function freeVariables(expr: Expr): ReadonlySet<string> {
+  return synthesize(expr, freeCache, (node, kids) => {
+    switch (node.kind) {
       case 'Var':
-        if (!bound.has(e.name)) free.add(e.name);
-        return;
+        return new Set([node.name]);
       case 'Lambda':
-        walk(e.body, new Set(bound).add(e.param));
-        return;
+        return without(kids[0]!, node.param);
       case 'Let':
         // `let` is non-recursive: the bound name is not in scope inside `value`.
-        walk(e.value, bound);
-        walk(e.body, new Set(bound).add(e.name));
-        return;
+        return union([kids[0]!, without(kids[1]!, node.name)]);
       default:
-        for (const child of children(e)) walk(child, bound);
+        return union(kids);
     }
-  };
-  walk(expr, new Set());
-  return free;
+  });
+}
+
+const EMPTY: ReadonlySet<string> = new Set();
+
+function without(set: ReadonlySet<string>, name: string): ReadonlySet<string> {
+  if (!set.has(name)) return set;
+  const copy = new Set(set);
+  copy.delete(name);
+  return copy;
+}
+
+function union(sets: ReadonlyArray<ReadonlySet<string>>): ReadonlySet<string> {
+  const nonEmpty = sets.filter((x) => x.size > 0);
+  if (nonEmpty.length === 0) return EMPTY;
+  if (nonEmpty.length === 1) return nonEmpty[0]!; // share: sets are never mutated
+  return new Set(nonEmpty.flatMap((x) => [...x]));
+}
+
+// ---- memoised bottom-up attributes ------------------------------------------
+//
+// Nodes are immutable and the reducer shares unchanged sub-trees between
+// steps, so per-node results can be cached safely. The traversal is iterative,
+// so these are also safe on trees far deeper than the call stack allows.
+
+const freeCache = new WeakMap<Expr, ReadonlySet<string>>();
+const sizeCache = new WeakMap<Expr, number>();
+const depthCache = new WeakMap<Expr, number>();
+const maxIdCache = new WeakMap<Expr, NodeId>();
+
+function synthesize<T>(root: Expr, cache: WeakMap<Expr, T>, combine: (node: Expr, kids: T[]) => T): T {
+  const cached = cache.get(root);
+  if (cached !== undefined) return cached;
+  const stack: Array<[Expr, boolean]> = [[root, false]];
+  while (stack.length > 0) {
+    const [node, expanded] = stack.pop()!;
+    if (cache.has(node)) continue;
+    const kids = children(node);
+    if (!expanded) {
+      stack.push([node, true]);
+      for (const kid of kids) if (!cache.has(kid)) stack.push([kid, false]);
+    } else {
+      cache.set(node, combine(node, kids.map((kid) => cache.get(kid)!)));
+    }
+  }
+  return cache.get(root)!;
+}
+
+export function countNodes(expr: Expr): number {
+  return synthesize(expr, sizeCache, (_, kids) => kids.reduce((sum, n) => sum + n, 1));
+}
+
+/** Height of the tree (a leaf has depth 1). Safe on arbitrarily deep trees. */
+export function exprDepth(expr: Expr): number {
+  return synthesize(expr, depthCache, (_, kids) => 1 + kids.reduce((max, d) => Math.max(max, d), 0));
+}
+
+export function maxNodeId(expr: Expr): NodeId {
+  return synthesize(expr, maxIdCache, (node, kids) => kids.reduce((max, id) => Math.max(max, id), node.id));
 }
