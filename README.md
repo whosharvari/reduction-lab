@@ -38,8 +38,9 @@ into something you can watch.
 
 ## Quick start
 
-Requires **Node.js 22.22+ or 24.15+**; it was developed on Node 24.16. (`npm run dev`/`build`
-alone work on Node 20.19+, but the test suite needs the newer versions because of jsdom.)
+Requires Node.js `^22.22.2 || ^24.15.0 || >=26.0.0` (the `engines` field in `package.json`,
+set by jsdom). Type-check, tests and build were run on Node 24.16.0 / npm 11.13.0; other
+versions were not tested.
 Everything runs locally, with no accounts, API keys or network access after `npm install`.
 
 ```sh
@@ -221,9 +222,7 @@ More in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **Performance:**
   - Each step costs time linear in the expression's size, and substitution copies values
     instead of sharing them.
-  - Normal programs are instant. An extreme input, such as folding a 1,200-element list
-    into a 1000-level nested list, takes tens of seconds, but the page stays responsive
-    and can be stopped.
+  - Very large inputs can be slow. Run to end is time-boxed in batches and can be stopped.
   - States over 2,500 characters drop syntax colouring, though their highlights stay exact.
   - Long lists and histories are windowed in the UI.
 - **Fold display.** `fold` consumes its list as it goes (`fold f acc [rest]`). The original
