@@ -37,12 +37,19 @@ function freshName(base: string, avoid: ReadonlySet<string>): string {
   return candidate;
 }
 
-export function substitute(body: Expr, name: string, value: Expr, ids: IdGenerator): Expr {
+/** What a substitution actually did; filled in when passed to `substitute` (observation only). */
+export interface SubstitutionStats {
+  occurrences: number;
+  readonly renamed: Array<readonly [string, string]>;
+}
+
+export function substitute(body: Expr, name: string, value: Expr, ids: IdGenerator, stats?: SubstitutionStats): Expr {
   const valueFree = freeVariables(value);
   let firstUse = true;
   // The first occurrence reuses `value` itself (it has left its old position);
   // later occurrences are copies with fresh ids.
   const occurrence = (): Expr => {
+    if (stats) stats.occurrences += 1;
     if (firstUse) {
       firstUse = false;
       return value;
@@ -56,6 +63,7 @@ export function substitute(body: Expr, name: string, value: Expr, ids: IdGenerat
     if (valueFree.has(binder)) {
       const avoid = allNames(scope, new Set(valueFree)).add(name);
       const renamed = freshName(binder, avoid);
+      stats?.renamed.push([binder, renamed]);
       return rebuild(renamed, go(renameFree(scope, binder, renamed)));
     }
     return rebuild(binder, go(scope));

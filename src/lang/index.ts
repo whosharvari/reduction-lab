@@ -33,7 +33,7 @@ export { printExpr, printWithRanges, type PrintedExpr, type TextRange } from './
 export * from './paths';
 export type * from './reduction/types';
 export { SmallStepReducer, isValue } from './reduction/reducer';
-export { substitute, cloneWithFreshIds } from './reduction/substitution';
+export { substitute, cloneWithFreshIds, type SubstitutionStats } from './reduction/substitution';
 export {
   traceReduction,
   stateAt,

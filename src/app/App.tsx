@@ -10,6 +10,7 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { Inspector } from './components/Inspector';
 import { FoldVisual, MapVisual } from './components/ListViews';
 import { Stage } from './components/Stage';
+import { Spotlight } from './components/Spotlight';
 import { SyntaxTree } from './components/SyntaxTree';
 import { DEFAULT_EXAMPLE, EXAMPLES, type Example } from './examples';
 import { deriveFoldView, deriveMapView, type Position } from './model/visualization';
@@ -216,6 +217,7 @@ export function App() {
           {snapshot ? (
             <>
               <Stage snapshot={snapshot} />
+              <Spotlight snapshot={snapshot} />
 
               <section className="panel" aria-labelledby="viz-title">
                 <header className="panel-header">

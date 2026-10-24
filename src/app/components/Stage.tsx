@@ -1,12 +1,11 @@
 /**
  * The centrepiece: the current expression, with the next redex, the region
  * the last step produced, and the active list element highlighted by node id.
+ * What the last step did, in detail, is shown by the Spotlight panel below it.
  */
-import { nodeAt, printExpr, type ExecutionSnapshot, type HistoryEntry } from '../../lang';
-import { RULES, rewriteOf } from '../model/visualization';
+import { nodeAt, printExpr, type ExecutionSnapshot } from '../../lang';
+import { RULES } from '../model/visualization';
 import { CodeView, type MarkList } from './CodeView';
-
-const PREVIEW_CHARS = 240;
 
 export function Stage({ snapshot }: { readonly snapshot: ExecutionSnapshot }) {
   const { current, next } = snapshot;
@@ -60,33 +59,6 @@ export function Stage({ snapshot }: { readonly snapshot: ExecutionSnapshot }) {
           </p>
         )}
       </div>
-
-      {last && <LastRewrite entry={current} />}
     </section>
-  );
-}
-
-function LastRewrite({ entry }: { readonly entry: HistoryEntry }) {
-  const step = entry.step!;
-  const { before, after } = rewriteOf(step);
-  return (
-    <div className="rewrite" aria-label="Latest rewrite">
-      <div className="rewrite-head">
-        <span className={`rule-chip rule-${step.rule}`}>{RULES[step.rule].symbol}</span>
-        <span>
-          Step {entry.index}: <strong>{RULES[step.rule].name}</strong>
-        </span>
-      </div>
-      <div className="rewrite-grid">
-        <span className="rewrite-label">Before</span>
-        <CodeView expr={step.before} marks={[[step.redexId, 'redex']]} label="Expression before the latest step" />
-        <span className="rewrite-label">Rewrite</span>
-        <span className="rewrite-pair">
-          <CodeView expr={before} className="code-redex" label="Redex" maxChars={PREVIEW_CHARS} />
-          <span className="arrow" aria-hidden="true">⟶</span>
-          <CodeView expr={after} className="code-changed" label="Replacement" maxChars={PREVIEW_CHARS} />
-        </span>
-      </div>
-    </div>
   );
 }

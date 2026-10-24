@@ -14,7 +14,7 @@
  *  - Invariant (tested): reducing to a value agrees with `evaluate` — same value,
  *    or the same error kind.
  */
-import type { Expr, NodeId } from '../ast';
+import type { BinaryOperator, Expr, NodeId } from '../ast';
 import type { LangError } from '../errors';
 import type { Path } from '../paths';
 
@@ -81,10 +81,38 @@ export interface FoldFocus {
   readonly original?: readonly Expr[];
 }
 
+/**
+ * Structured facts about a contraction, recorded by the reducer while it performs
+ * the rewrite, so the UI can explain a step without parsing `description`.
+ */
+export type StepDetail =
+  /** beta / let: `name` := `value` in the body. */
+  | {
+      readonly kind: 'substitution';
+      readonly name: string;
+      readonly value: Expr;
+      /** Free occurrences of `name` that were replaced (0: the value is discarded). */
+      readonly occurrences: number;
+      /** Binders renamed to avoid capturing a free variable of `value`, as [from, to]. */
+      readonly renamed: readonly (readonly [string, string])[];
+    }
+  /** arithmetic / comparison / negate: operands are values, `result` is computed. */
+  | { readonly kind: 'operation'; readonly op: BinaryOperator | 'negate'; readonly operands: readonly Expr[]; readonly result: Expr }
+  /** logic: `shortCircuit` when the left operand alone decided the result. */
+  | { readonly kind: 'logic'; readonly op: '&&' | '||'; readonly left: Expr; readonly shortCircuit: boolean; readonly result: Expr }
+  /** if: which branch was kept and which was discarded unevaluated. */
+  | { readonly kind: 'branch'; readonly condition: boolean; readonly kept: Expr; readonly discarded: Expr }
+  /** map: one application of `fn` per element of the input list. */
+  | { readonly kind: 'map'; readonly fn: Expr; readonly count: number }
+  /** fold-step / fold-done: `element` absent when the list was empty. */
+  | { readonly kind: 'fold'; readonly fn: Expr; readonly accumulator: Expr; readonly element?: Expr; readonly remaining: number };
+
 export interface ReductionStep {
   readonly rule: ReductionRule;
   /** Human-readable explanation, e.g. "Apply \x -> x * 2 to 1". */
   readonly description: string;
+  /** Structured facts behind `description` (see `StepDetail`). */
+  readonly detail: StepDetail;
   readonly before: Expr;
   readonly after: Expr;
   /** Location of the redex in `before` (and of its replacement in `after`). */

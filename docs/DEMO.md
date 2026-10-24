@@ -40,7 +40,8 @@ is pre-recorded. Each click rewrites the expression by exactly one semantic rule
 | 4 | `15` | arithmetic (Complete) |
 
 **Concept:** strict, left-to-right evaluation. An operator fires only when both
-operands are values. The Inspector names each rule and explains it.
+operands are values. The Reduction spotlight shows each step's before → after with its rule
+and the reason; the Inspector previews the next one.
 
 ### 2. Functions and substitution (≈45 s)
 

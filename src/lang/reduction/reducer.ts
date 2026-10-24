@@ -12,8 +12,8 @@ import { LangError, nameError, typeError, type Span } from '../errors';
 import { arithmetic, closestName } from '../evaluator';
 import { nodeAt, replaceAt, type Path, type PathSegment } from '../paths';
 import { printExpr } from '../printer';
-import { cloneWithFreshIds, substitute } from './substitution';
-import type { FoldFocus, ListFocus, Reducer, ReductionRule, ReductionStep, StepResult } from './types';
+import { cloneWithFreshIds, substitute, type SubstitutionStats } from './substitution';
+import type { FoldFocus, ListFocus, Reducer, ReductionRule, ReductionStep, StepDetail, StepResult } from './types';
 
 // ---- values ----------------------------------------------------------------
 
@@ -167,6 +167,7 @@ interface Contraction {
   readonly rule: ReductionRule;
   readonly description: string;
   readonly replacement: Expr;
+  readonly detail: StepDetail;
 }
 
 class Contractor {
@@ -188,6 +189,13 @@ class Contractor {
     return { kind: 'App', id: this.ids.next(), span, fn, arg };
   }
 
+  /** `body[name := value]`, plus what the substitution actually did. */
+  private substitution(body: Expr, name: string, value: Expr): { replacement: Expr; detail: StepDetail } {
+    const stats: SubstitutionStats = { occurrences: 0, renamed: [] };
+    const replacement = substitute(body, name, value, this.ids, stats);
+    return { replacement, detail: { kind: 'substitution', name, value, occurrences: stats.occurrences, renamed: stats.renamed } };
+  }
+
   contract(node: Expr): Contraction {
     switch (node.kind) {
       case 'Var':
@@ -198,17 +206,19 @@ class Contractor {
         return {
           rule: 'let',
           description: `Bind ${node.name} = ${printExpr(node.value)} in the body`,
-          replacement: substitute(node.body, node.name, node.value, this.ids),
+          ...this.substitution(node.body, node.name, node.value),
         };
       case 'If': {
         if (node.cond.kind !== 'Boolean') {
           throw typeError(`The condition of 'if' must be a boolean, but got ${describe(node.cond)}`, node.cond.span);
         }
         const branch = node.cond.value ? 'then' : 'else';
+        const [kept, discarded] = node.cond.value ? [node.thenBranch, node.elseBranch] : [node.elseBranch, node.thenBranch];
         return {
           rule: 'if',
           description: `Condition is ${printExpr(node.cond)}: take the '${branch}' branch`,
-          replacement: node.cond.value ? node.thenBranch : node.elseBranch,
+          replacement: kept,
+          detail: { kind: 'branch', condition: node.cond.value, kept, discarded },
         };
       }
       case 'Unary': {
@@ -216,7 +226,12 @@ class Contractor {
           throw typeError(`Unary '-' expects a number, but got ${describe(node.operand)}`, node.span);
         }
         const result = this.number(-node.operand.value, node.span);
-        return { rule: 'negate', description: `Negate ${printExpr(node.operand)}`, replacement: result };
+        return {
+          rule: 'negate',
+          description: `Negate ${printExpr(node.operand)}`,
+          replacement: result,
+          detail: { kind: 'operation', op: 'negate', operands: [node.operand], result },
+        };
       }
       case 'Binary':
         return this.binary(node);
@@ -231,7 +246,7 @@ class Contractor {
       return {
         rule: 'beta',
         description: `Apply ${printExpr(fn)} to ${printExpr(arg)}: substitute ${fn.param} := ${printExpr(arg)}`,
-        replacement: substitute(fn.body, fn.param, arg, this.ids),
+        ...this.substitution(fn.body, fn.param, arg),
       };
     }
     const spine = builtinSpine(node);
@@ -257,6 +272,7 @@ class Contractor {
         ? 'map over the empty list gives []'
         : `Apply ${printExpr(f!)} to each of the ${n} element${n === 1 ? '' : 's'}`,
       replacement,
+      detail: { kind: 'map', fn: f!, count: n },
     };
   }
 
@@ -269,7 +285,12 @@ class Contractor {
     }
     const list = xs!;
     if (list.elements.length === 0) {
-      return { rule: 'fold-done', description: `fold reached the end of the list: the result is ${printExpr(z!)}`, replacement: z! };
+      return {
+        rule: 'fold-done',
+        description: `fold reached the end of the list: the result is ${printExpr(z!)}`,
+        replacement: z!,
+        detail: { kind: 'fold', fn: f!, accumulator: z!, remaining: 0 },
+      };
     }
     const [x, ...rest] = list.elements as [Expr, ...Expr[]];
     // fold f z [x, ...rest]  ->  fold f (f z x) [...rest]
@@ -280,6 +301,7 @@ class Contractor {
       rule: 'fold-step',
       description: `Combine accumulator ${printExpr(z!)} with element ${printExpr(x)}`,
       replacement,
+      detail: { kind: 'fold', fn: f!, accumulator: z!, element: x, remaining: rest.length },
     };
   }
 
@@ -291,18 +313,33 @@ class Contractor {
         throw typeError(`Operator '${op}' expects booleans, but its left operand is ${describe(left)}`, left.span);
       }
       if (shortCircuits(node)) {
-        return { rule: 'logic', description: `${printExpr(left)} ${op} … is ${printExpr(left)} without evaluating the right side`, replacement: left };
+        return {
+          rule: 'logic',
+          description: `${printExpr(left)} ${op} … is ${printExpr(left)} without evaluating the right side`,
+          replacement: left,
+          detail: { kind: 'logic', op, left, shortCircuit: true, result: left },
+        };
       }
       if (right.kind !== 'Boolean') {
         throw typeError(`Operator '${op}' expects booleans, but its right operand is ${describe(right)}`, right.span);
       }
-      return { rule: 'logic', description: `${printExpr(node)} is ${printExpr(right)}`, replacement: right };
+      return {
+        rule: 'logic',
+        description: `${printExpr(node)} is ${printExpr(right)}`,
+        replacement: right,
+        detail: { kind: 'logic', op, left, shortCircuit: false, result: right },
+      };
     }
 
     if (op === '==' || op === '/=') {
       const equal = exprEquals(left, right, span);
       const result = this.boolean(op === '==' ? equal : !equal, span);
-      return { rule: 'comparison', description: `${printExpr(node)} is ${printExpr(result)}`, replacement: result };
+      return {
+        rule: 'comparison',
+        description: `${printExpr(node)} is ${printExpr(result)}`,
+        replacement: result,
+        detail: { kind: 'operation', op, operands: [left, right], result },
+      };
     }
 
     if (left.kind !== 'Number') {
@@ -324,7 +361,12 @@ class Contractor {
         rule = 'arithmetic';
         result = this.number(arithmetic(op, a, b, span), span);
     }
-    return { rule, description: `${printExpr(node)} = ${printExpr(result)}`, replacement: result };
+    return {
+      rule,
+      description: `${printExpr(node)} = ${printExpr(result)}`,
+      replacement: result,
+      detail: { kind: 'operation', op, operands: [left, right], result },
+    };
   }
 }
 
@@ -423,12 +465,13 @@ export class SmallStepReducer implements Reducer {
     if (!redex) return { status: 'done', expr };
     if (expr !== this.lastOutput) this.ids.reserveAbove(expr);
     try {
-      const { rule, description, replacement } = new Contractor(this.ids).contract(redex.node);
+      const { rule, description, replacement, detail } = new Contractor(this.ids).contract(redex.node);
       const after = replaceAt(expr, redex.path, replacement);
       const fold = foldFocus(rule, redex.path, expr, after, redex.node);
       const step: ReductionStep = {
         rule,
         description,
+        detail,
         before: expr,
         after,
         path: redex.path,

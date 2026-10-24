@@ -99,15 +99,20 @@ end is disabled while the edited code has a syntax error, so a valid history is 
 
   Highlighting is resolved from AST node ids, never from text search, so identical
   sub-expressions are never confused.
-- **Latest rewrite.** The expression before the last step, with its redex marked, and the
-  redex → replacement pair.
+- **Reduction spotlight.** What the last step did: the rule, the redex → replacement pair
+  (amber → blue), a one-line explanation built from the facts the reducer recorded during
+  that step (e.g. which variable was substituted, how many occurrences, any capture-avoiding
+  rename, which `if` branch was kept), and the expression it happened in. It names the
+  matching syntax-tree node. Before the first step it previews the first redex; on a runtime
+  error it shows where reduction is stuck instead of a rewrite.
 - **Visualise → Lists.**
   - *map*: each element's original input and current expression, marked pending,
     processing, done or failed.
   - *fold*: the original list (consumed, active and pending elements) in left-fold
     order. Also the live accumulator, the change the last step made to it, and the
     accumulator values so far.
-- **Visualise → Syntax tree.** A compact AST with the redex and replacement marked.
+- **Visualise → Syntax tree.** The current AST as one connected tree, keyed by node id, with
+  the next redex (amber), the subtree the last step produced (blue), new nodes and errors marked.
 - **Inspector.** The rule (β-reduction, let substitution, arithmetic, map expansion, fold
   step, …) with a plain-language explanation. It also shows the reducer's own description,
   the redex and its replacement, and list/fold metadata. At the end it shows the final value or error.
@@ -151,11 +156,11 @@ src/lang/                 UI-independent language engine (no React imports)
     reducer.ts            one semantic rewrite per step (findRedex + contract)
     substitution.ts       capture-avoiding substitution with alpha-renaming
     history.ts            ExecutionController: next / previous / reset / goTo / runToCompletion, limits
-    trace.ts, types.ts    one-shot traces; step metadata types
+    trace.ts, types.ts    one-shot traces; step metadata types (incl. each step's structured `detail`)
 src/app/                  React UI (Vite)
   useExecution.ts         binds the controller to React: immutable snapshots, batched Run, cancellation
-  model/                  syntax/highlight segments; map/fold view models derived from real history
-  components/             Editor, Controls, Stage, ListViews, Inspector, HistoryPanel, SyntaxTree
+  model/                  syntax/highlight segments; map/fold, tree and spotlight view models derived from real history
+  components/             Editor, Controls, Stage, Spotlight, ListViews, Inspector, HistoryPanel, SyntaxTree
   examples.ts             built-in programs with explanations and expected results
 tests/                    engine, reducer, history, view-model, UI, robustness and demo tests
 docs/                     LANGUAGE.md, ARCHITECTURE.md, DEMO.md
