@@ -657,8 +657,14 @@ details.inspector-section:not([open]) > summary { margin-bottom: 0; }
 
 /* ---- responsive ---------------------------------------------------------------------- */
 
+/* Narrow desktop: keep all three regions, with slimmer sidebars so the workspace keeps the most width. */
 @media (max-width: 1280px) {
-  .workspace { grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); }
+  .workspace { grid-template-columns: minmax(230px, 250px) minmax(0, 1fr) minmax(260px, 280px); gap: 16px; }
+}
+
+/* Below this the three regions no longer fit comfortably: Inspector and History move under the workspace. */
+@media (max-width: 1150px) {
+  .workspace { grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); gap: 20px; }
   .col-side {
     grid-column: 1 / -1;
     position: static;
@@ -690,6 +696,15 @@ details.inspector-section:not([open]) > summary { margin-bottom: 0; }
   h1 { font-size: 21px; }
   /* Two rows that scroll sideways keep the stepper closer to the top of the page. */
   .examples { grid-template-columns: none; grid-template-rows: repeat(2, auto); grid-auto-flow: column; grid-auto-columns: 62%; overflow-x: auto; padding-bottom: 4px; }
+  /* Scroll cue, CSS only: a soft green shadow on whichever edge still has hidden examples.
+     The white "local" covers scroll with the content and hide each shadow once that end is reached. */
+  .examples {
+    background:
+      linear-gradient(to right, var(--panel) 30%, transparent) left center / 28px 100% no-repeat local,
+      linear-gradient(to left, var(--panel) 30%, transparent) right center / 28px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, rgba(23, 96, 63, 0.26), transparent) left center / 12px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(23, 96, 63, 0.26), transparent) right center / 12px 100% no-repeat scroll;
+  }
   .spotlight-tree { margin-left: 0; }
   .spotlight-arrow { transform: rotate(90deg); padding: 4px 14px; }
   .acc-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
