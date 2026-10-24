@@ -118,3 +118,27 @@ and so does growing past `maxNodes` (default 50,000). A program that needs exact
   and small-step engines can follow the same order.
 - **Non-recursive `let`.** The semantics stay simple for substitution. Recursion
   (e.g. `letrec`) can be added later without changing existing programs.
+
+## Frontend (`src/app/`)
+
+- **`useExecution`** owns one `ExecutionController` per loaded program. It changes the
+  controller only in event handlers and timers, then publishes an immutable
+  `ExecutionView` (`snapshot()` plus a copy of `history`). It never touches the
+  controller during render, so React Strict Mode double-rendering can't cause extra steps.
+  - *Run to end* advances in batches of about 12 ms, with `setTimeout(0)` between them.
+  - *Play* steps every 650 ms.
+  - A cancellation token stops either one as soon as any other action happens.
+  - Parse errors are caught before a controller is created.
+- **`model/highlight.ts`** gets syntax colours from the real lexer and highlight
+  marks from `printWithRanges`, keyed by node id.
+- **`model/visualization.ts`** builds the map and fold view models:
+  - Map: the element statuses come from `isValue` on the elements in the current AST,
+    the active element from the next step's path, and the inputs from the recorded
+    `map` step.
+  - Fold: progress comes from the remaining list in the current AST, the active index
+    from `foldFocus`, and the accumulator timeline from the recorded steps.
+
+  No state advances on a timer.
+- **Components:** `Editor` (a textarea over a highlighted `<pre>`), `Controls`, `Stage`
+  (current expression plus latest rewrite), `ListViews` (map/fold), `Inspector`,
+  `HistoryPanel` (windowed, click to jump), and `SyntaxTree`.
