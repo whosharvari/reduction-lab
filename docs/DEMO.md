@@ -10,8 +10,8 @@ browser window at least 1280px wide (three-column layout).
 - Arrow keys are ignored while the editor has focus, so click anywhere outside the editor first.
 - `←` steps back, `Home` resets to step 0, and `End` runs to the end.
 
-**Highlights:** amber marks what reduces next, green what the last step produced, a
-dashed outline the list element being updated, and red where reduction got stuck.
+**Highlights:** amber marks what reduces next, blue what the last step produced, a
+dashed line above the list element being updated, and red where reduction got stuck.
 
 ---
 
@@ -90,7 +90,7 @@ map (\x -> x * 2) [1, 2, 3]
 - **Step 7:** `[2, 4, 6]` (Complete).
 
 **Concept:** `map f [x₁…xₙ]` rewrites in place to `[f x₁ … f xₙ]`, then each application
-reduces. Point out the dashed outline on the list element being updated in the main expression.
+reduces. Point out the dashed line above the list element being updated in the main expression.
 
 ### 4. `fold`: watching the accumulator (≈40 s)
 

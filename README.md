@@ -34,7 +34,7 @@ into something you can watch.
 | `map` and `fold` | Built-ins. `fold f initial list` is a left fold, accumulator first |
 | One-step-at-a-time reduction | `SmallStepReducer.step` performs exactly one rewrite. **Next step** calls it once |
 | In-place expression rewriting | Each step replaces one sub-tree of the AST. The UI shows the new expression with the rewritten region marked |
-| Highlight the list element being updated | `listFocus` metadata, shown as a dashed outline in the expression and an *active* cell in the map/fold views |
+| Highlight the list element being updated | `listFocus` metadata, shown as a dashed line above it in the expression and an *active* cell in the map/fold views |
 
 ## Quick start
 
@@ -93,8 +93,8 @@ end is disabled while the edited code has a syntax error, so a valid history is 
 
 - **Current expression.** The real intermediate expression, syntax-coloured.
   - Amber: the redex the next step will rewrite.
-  - Green: what the previous step produced.
-  - Dashed outline: the list element being updated.
+  - Blue: what the previous step produced.
+  - Dashed line above: the list element being updated.
   - Red: where reduction got stuck.
 
   Highlighting is resolved from AST node ids, never from text search, so identical

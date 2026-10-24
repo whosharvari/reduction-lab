@@ -126,7 +126,7 @@ export function App() {
           <div>
             <strong>Each Next step performs one real reduction.</strong>{' '}
             The interpreter rewrites the expression in place, exactly as the language semantics dictate: no pre-recorded
-            animation. Amber marks what reduces next, green what was just rewritten.
+            animation. Amber marks what reduces next, blue what was just rewritten.
           </div>
           <ol className="intro-steps">
             <li>Pick an example or write your own code.</li>
