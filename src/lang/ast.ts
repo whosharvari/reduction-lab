@@ -135,6 +135,43 @@ export function children(expr: Expr): readonly Expr[] {
   }
 }
 
+/** Rebuild `expr` with each direct child replaced by `f(child)` (other fields, incl. id, kept). */
+export function mapChildren(expr: Expr, f: (child: Expr) => Expr): Expr {
+  switch (expr.kind) {
+    case 'Number':
+    case 'Boolean':
+    case 'Var':
+      return expr;
+    case 'List':
+      return { ...expr, elements: expr.elements.map(f) };
+    case 'Lambda':
+      return { ...expr, body: f(expr.body) };
+    case 'App':
+      return { ...expr, fn: f(expr.fn), arg: f(expr.arg) };
+    case 'Let':
+      return { ...expr, value: f(expr.value), body: f(expr.body) };
+    case 'If':
+      return { ...expr, cond: f(expr.cond), thenBranch: f(expr.thenBranch), elseBranch: f(expr.elseBranch) };
+    case 'Binary':
+      return { ...expr, left: f(expr.left), right: f(expr.right) };
+    case 'Unary':
+      return { ...expr, operand: f(expr.operand) };
+  }
+}
+
+export function countNodes(expr: Expr): number {
+  return children(expr).reduce((sum, child) => sum + countNodes(child), 1);
+}
+
+/** Every identifier appearing in `expr`, bound or free. */
+export function allNames(expr: Expr, into: Set<string> = new Set()): Set<string> {
+  if (expr.kind === 'Var') into.add(expr.name);
+  if (expr.kind === 'Lambda') into.add(expr.param);
+  if (expr.kind === 'Let') into.add(expr.name);
+  for (const child of children(expr)) allNames(child, into);
+  return into;
+}
+
 export function maxNodeId(expr: Expr): NodeId {
   return children(expr).reduce((max, child) => Math.max(max, maxNodeId(child)), expr.id);
 }

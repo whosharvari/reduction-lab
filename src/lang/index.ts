@@ -2,7 +2,7 @@
  * Public API of the Reduction Lab language. The UI imports only from here.
  *
  *   source --tokenize--> tokens --parse--> Expr --evaluate--> Value
- *                                            \--(Phase 2) reduce, one step at a time
+ *                                            \--step--> Expr --step--> ... --> value (small-step)
  */
 import type { Expr } from './ast';
 import { createGlobalEnvironment } from './builtins';
@@ -10,6 +10,15 @@ import type { Environment } from './environment';
 import { isLangError, LangError } from './errors';
 import { evaluate, type EvalOptions } from './evaluator';
 import { parse } from './parser';
+import { traceReduction, type TraceOptions } from './reduction/trace';
+export {
+  ExecutionController,
+  type ExecutionOptions,
+  type ExecutionSnapshot,
+  type ExecutionStatus,
+  type HistoryEntry,
+} from './reduction/history';
+import type { ReductionTrace } from './reduction/types';
 import { formatValue, type Value } from './values';
 
 export * from './ast';
@@ -20,9 +29,20 @@ export { evaluate, DEFAULT_MAX_DEPTH, type EvalOptions } from './evaluator';
 export { Environment } from './environment';
 export { BUILTINS, createGlobalEnvironment, type BuiltinDefinition } from './builtins';
 export * from './values';
-export { printExpr } from './printer';
+export { printExpr, printWithRanges, type PrintedExpr, type TextRange } from './printer';
 export * from './paths';
 export type * from './reduction/types';
+export { SmallStepReducer, isValue } from './reduction/reducer';
+export { substitute, cloneWithFreshIds } from './reduction/substitution';
+export {
+  traceReduction,
+  stateAt,
+  states,
+  finalExpr,
+  DEFAULT_MAX_STEPS,
+  DEFAULT_MAX_NODES,
+  type TraceOptions,
+} from './reduction/trace';
 
 /** Parse and evaluate in one call; throws `LangError` on failure. */
 export function run(source: string, env: Environment = createGlobalEnvironment(), options?: EvalOptions): Value {
@@ -44,4 +64,9 @@ export function interpret(source: string, options?: EvalOptions): InterpretResul
     if (isLangError(error)) return ast ? { ok: false, ast, error } : { ok: false, error };
     throw error;
   }
+}
+
+/** Parse `source` and record its full small-step reduction. Throws `LangError` only for syntax errors. */
+export function trace(source: string, options?: TraceOptions): ReductionTrace {
+  return traceReduction(parse(source), options);
 }

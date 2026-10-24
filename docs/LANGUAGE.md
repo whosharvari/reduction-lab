@@ -111,6 +111,34 @@ evaluates `((0 + 1) + 2) + 3 = 6`. `fold f z []` is `z`.
 
 Both are curried: `map f` and `fold f z` are function values.
 
+## Small-step semantics
+
+The reducer (`src/lang/reduction/`) rewrites the expression one redex at a time. It visits
+redexes in the evaluation order above, and every intermediate state is valid source.
+
+| Rule        | Rewrite |
+|-------------|---------|
+| `beta`      | `(\x -> e) v` → `e[x := v]` |
+| `let`       | `let x = v in e` → `e[x := v]` |
+| `arithmetic`| `2 + 3` → `5` (`/` by `0` is a RuntimeError) |
+| `comparison`| `2 < 3` → `True`; `[1] == [1]` → `True` |
+| `logic`     | `False && e` → `False`, `True && b` → `b` (same for `\|\|`) |
+| `negate`    | `-3` (unary minus applied to `3`) → the literal `-3` |
+| `if`        | `if True then a else b` → `a` |
+| `map`       | `map f [x1, …, xn]` → `[f x1, …, f xn]` |
+| `fold-step` | `fold f z [x, …xs]` → `fold f (f z x) […xs]` |
+| `fold-done` | `fold f z []` → `z` |
+
+Here `v` is a value: a number, boolean, lambda, list of values, built-in name, or
+built-in applied to fewer arguments than it needs (e.g. `map f`).
+Substitution avoids name capture. If a binder would capture a free name of the
+substituted value, the binder is renamed with primes (`\map -> …` becomes `\map' -> …`).
+After `map`, the list's elements reduce left to right, and each step reports which
+element index is changing.
+
+The reducer gives the same result as the big-step evaluator: the same value, or an error of the same kind.
+Error messages can differ in detail (for example, how a function value is printed).
+
 ## Errors
 
 Every error has a kind, a message, and (when known) a source span (offsets plus line and column).
@@ -120,7 +148,7 @@ Every error has a kind, a message, and (when known) a source span (offsets plus 
 | `SyntaxError`  | Bad character, unexpected token, unclosed bracket, empty program, duplicate parameter, chained comparison | `(1 + 2`, `1 < 2 < 3` |
 | `NameError`    | A variable is evaluated but not bound in scope. Suggests a close match. | `mapp f xs` gives `Did you mean 'map'?` |
 | `TypeError`    | Applying a non-function; operator or built-in given the wrong kind of value; non-boolean `if` condition | `5 3`, `1 + True`, `map 5 [1]` |
-| `RuntimeError` | Division by zero; evaluation deeper than the depth limit (default 2000) | `1 / 0`, `(\x -> x x) (\x -> x x)` |
+| `RuntimeError` | Division by zero; evaluation deeper than the depth limit (default 2000); reduction longer than 10,000 steps or larger than 50,000 nodes | `1 / 0`, `(\x -> x x) (\x -> x x)` |
 
 Errors are raised when the offending expression is *evaluated*. An unused
 undefined variable inside a lambda body that never runs is not an error.

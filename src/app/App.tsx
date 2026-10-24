@@ -1,15 +1,16 @@
 /**
- * Phase 1 shell: edit an expression and evaluate it with the real interpreter.
- * The step-by-step reduction view arrives in later phases.
+ * Edit an expression, evaluate it, and step through its real reduction trace.
  */
 import { useMemo, useState } from 'react';
-import { interpret, printExpr } from '../lang';
+import { interpret, printExpr, traceReduction } from '../lang';
 import { EXAMPLES } from './examples';
+import { Stepper } from './Stepper';
 
 export function App() {
   const [source, setSource] = useState(EXAMPLES[2]!.source);
   const [submitted, setSubmitted] = useState(source);
   const result = useMemo(() => interpret(submitted), [submitted]);
+  const reduction = useMemo(() => (result.ast ? traceReduction(result.ast) : undefined), [result]);
 
   const run = () => setSubmitted(source);
 
@@ -73,6 +74,8 @@ export function App() {
           <pre className="error">{result.error.format(submitted)}</pre>
         )}
       </section>
+
+      {reduction && <Stepper trace={reduction} />}
     </main>
   );
 }

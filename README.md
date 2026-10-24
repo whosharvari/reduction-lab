@@ -5,10 +5,10 @@ the Syntax Error 2026 Functional Programming Track. The goal: write an
 expression, then watch it reduce one step at a time, with lists, functions and
 accumulators visibly rewritten in place.
 
-**Status: Phase 1 of 5.** The language engine (tokenizer, parser, evaluator,
-built-ins, errors) is complete and tested, and the AST and interfaces for the
-small-step reducer are in place. The UI is currently a minimal evaluate box.
-Step-by-step reduction and visualisation are not implemented yet.
+**Status: Phase 2 of 5.** The language engine (tokenizer, parser, evaluator,
+built-ins, errors), the small-step reducer, and a navigable execution history
+controller are built and tested. The UI is still a basic step viewer. The full
+visual frontend is Phase 3.
 
 ## Setup
 
@@ -20,7 +20,8 @@ npm run dev        # start the playground at http://localhost:5173
 npm test           # run the test suite (Vitest)
 npm run typecheck  # TypeScript, no emit
 npm run build      # typecheck + production build into dist/
-npm run eval -- "map (\x -> x * 2) [1, 2, 3]"   # evaluate from the command line (add --ast to dump the tree)
+npm run eval -- "map (\x -> x * 2) [1, 2, 3]"   # evaluate from the command line
+npm run eval -- --steps "fold (\acc x -> acc + x) 0 [1, 2]"   # print every reduction step (--ast dumps the tree)
 ```
 
 ## Language at a glance
@@ -58,7 +59,12 @@ src/lang/          UI-independent interpreter
   builtins.ts      map, fold (curried)
   evaluator.ts     big-step reference semantics
   errors.ts        structured LangError (SyntaxError | NameError | TypeError | RuntimeError)
-  reduction/types.ts  contract for the Phase 2 small-step reducer
+  reduction/        small-step engine
+    reducer.ts       one semantic rewrite per step (findRedex + contract)
+    substitution.ts  capture-avoiding substitution
+    history.ts       ExecutionController: next / previous / reset / goTo / runToCompletion
+    trace.ts         one-shot traces (traceReduction, stateAt, states)
+    types.ts         step / trace data shapes
   index.ts         public API (parse, evaluate, run, interpret)
 src/app/           React UI (Vite)
 scripts/eval.ts    CLI runner
@@ -66,13 +72,46 @@ tests/             Vitest suites (parsed programs end to end)
 docs/              language spec + architecture notes
 ```
 
-The reference evaluator is environment-based and big-step. The upcoming reducer is
+The reference evaluator is environment-based and big-step. The reducer is
 substitution-based and works on the AST, so every intermediate state is
-genuine source code. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+genuine source code. A test checks that the two agree on every program in `tests/corpus.ts`.
+
+```
+map (\x -> x * 2) [1, 2, 3]
+[(\x -> x * 2) 1, (\x -> x * 2) 2, (\x -> x * 2) 3]    map
+[1 * 2, (\x -> x * 2) 2, (\x -> x * 2) 3]               beta        element 0
+[2, (\x -> x * 2) 2, (\x -> x * 2) 3]                   arithmetic  element 0
+...
+[2, 4, 6]
+```
+
+Stepping from code:
+
+```ts
+import { ExecutionController } from './src/lang';
+
+const run = ExecutionController.fromSource('fold (\\acc -> \\x -> acc + x) 0 [1, 2, 3]', { maxSteps: 1000 });
+run.next();                 // one semantic step
+run.current.source;         // 'fold (\\acc -> \\x -> acc + x) ((\\acc -> \\x -> acc + x) 0 1) [2, 3]'
+run.current.step?.foldFocus; // { phase: 'consume', index: 0, element: 1, accumulatorBefore: 0, … }
+run.previous();             // restores the earlier snapshot
+run.runToCompletion();      // { status: 'done', expr: 6 }, bounded by maxSteps
+```
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Known limitations
 
-- No small-step reduction yet (Phase 2). The UI shows only the final value.
+- The step view is functional but basic: no animation, no tree view, and no
+  accumulator panel for `fold` yet.
+- The reducer copies substituted values instead of sharing them, so programs that
+  duplicate large values grow quickly. A node limit (50,000) and a step limit (10,000) stop runaway cases.
+- `fold` consumes its list (`fold f acc [rest]`). The original list and the active
+  index come from history metadata (`foldFocus.original`/`index`), not from the expression.
+- Map-input and fold-index metadata need the history (`ExecutionController`). A lone
+  `SmallStepReducer.step` call has no memory, so it reports only structural focus.
+- Function values print differently in the two engines (`<function \y -> x + y>`
+  from the evaluator, `\y -> 1 + y` after substitution).
 - `let` is non-recursive and there is no `letrec`, so there is no general recursion.
   Loops are expressed with `map`/`fold`.
 - No static type checking. Type errors are detected at runtime, when the

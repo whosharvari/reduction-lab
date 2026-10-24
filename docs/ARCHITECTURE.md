@@ -4,8 +4,8 @@
             ┌──────────┐   Token[]   ┌──────────┐    Expr     ┌────────────┐   Value
  source ──▶ │  lexer   │ ──────────▶ │  parser  │ ──────────▶ │ evaluator  │ ───────▶
             └──────────┘             └──────────┘      │      └────────────┘
-                                                       │      ┌────────────┐   ReductionStep[]
-                                                       └────▶ │  reducer   │ ───────▶  (Phase 2)
+                                                       │      ┌────────────┐   ReductionTrace
+                                                       └────▶ │  reducer   │ ───────▶  (steps + outcome)
                                                               └────────────┘
 ```
 
@@ -18,13 +18,17 @@
 | `lexer.ts` | Source to tokens with spans; keywords, symbols, comments |
 | `ast.ts` | Immutable, JSON-serialisable node types; `IdGenerator`; `children`, `freeVariables` |
 | `parser.ts` | Recursive-descent parser implementing the grammar in `LANGUAGE.md`; desugaring |
-| `printer.ts` | AST back to source with minimal parentheses (round-trips through the parser) |
+| `printer.ts` | AST back to source with minimal parentheses (round-trips through the parser); `printWithRanges` maps node ids to text ranges for highlighting |
 | `paths.ts` | `Path` addressing; `nodeAt`, `pathTo`, persistent `replaceAt` |
 | `environment.ts` | Immutable linked-frame lexical environments |
 | `values.ts` | Runtime values (number, boolean, list, closure, builtin) and formatting |
 | `builtins.ts` | `map`, `fold`; curried built-in protocol; global environment |
 | `evaluator.ts` | Big-step reference semantics; depth guard; shared `arithmetic`/`valuesEqual` |
-| `reduction/types.ts` | Contract for the Phase 2 small-step engine (types only) |
+| `reduction/types.ts` | Step, step-result and trace data shapes |
+| `reduction/substitution.ts` | Capture-avoiding substitution; fresh-id cloning |
+| `reduction/reducer.ts` | `SmallStepReducer`: `findRedex` (evaluation order) + `contract` (one rule); `isValue` |
+| `reduction/history.ts` | `ExecutionController`: lazy, bounded, navigable history of AST snapshots; adds map-origin and fold-index metadata |
+| `reduction/trace.ts` | `traceReduction` one-shot trace (wraps the controller); `stateAt`, `states` |
 | `index.ts` | Public API: `parse`, `evaluate`, `run`, `interpret`, re-exports |
 
 ## The three boundaries
@@ -34,15 +38,67 @@
 2. **Evaluation** (`evaluate: Expr -> Value`). This is big-step and environment-based,
    and it is fast. It is the *reference semantics*: it defines what a program means.
    Closures pair a lambda body with its captured `Environment`.
-3. **Reduction** (`Reducer.step: Expr -> StepResult`, Phase 2). This is small-step and
+3. **Reduction** (`Reducer.step: Expr -> StepResult`). This is small-step and
    substitution-based. It operates on the **AST**, not on runtime values, so that
    every intermediate state is real, printable, highlightable code. One call
    performs one semantic rewrite (beta, let, arithmetic, map, fold-step, …)
    at a path, using `replaceAt`, and reports the rule, the path, the old and new
    node ids, and, for list operations, which element index is changing.
 
-Invariant to test in Phase 2: reducing any program to a normal form gives the
-same result as `evaluate` (equal value, or the same error kind).
+Invariant, tested over the shared corpus in `tests/corpus.ts`: reducing any program
+to a value gives the same result as `evaluate` (an equal value, or the same error kind).
+The tests also check on every step that the redex sits at `path` before the step
+and the replacement sits there after it, that states re-parse, and that node ids are unique.
+
+### Step metadata
+
+Every `ReductionStep` carries `before`/`after` snapshots, the redex `path`,
+`redexId`/`replacementId`, the `rule`, a `description`, and `completes` (true when `after` is a value).
+Two optional fields support the visualisation:
+
+- **`listFocus`**: the innermost list element that contains the redex. It has `index`, `listPath`/`listId`,
+  and `elementBefore`/`elementAfter`. If `map` produced the list, the history also adds
+  `origin: { fn, input }`, the mapped function and the original input element.
+- **`foldFocus`**: the innermost `fold` whose step this is. It has a `phase`:
+  - `consume`: `fold f z [x, …]` becomes `fold f (f z x) […]`
+  - `accumulate`: a step inside the accumulator expression
+  - `finish`: `fold f z []` becomes `z`
+
+  It also has `foldPath`, `accumulatorPath`, `listPath`, `accumulatorBefore`/`accumulatorAfter`,
+  and `element` (when consuming). The history adds `index`, the active element's position in
+  the original list, and `original`, the list before folding started.
+
+The reducer computes everything it can from `before` and `after` alone, so a single
+`step` call is self-contained. Only the history knows where a list *came from*. It tracks
+this in an id-keyed registry, which is safe because ids are never reissued.
+
+### Execution controller
+
+`ExecutionController` (`history.ts`) has no React dependency. It is the API the UI drives:
+
+| Member | Behaviour |
+|--------|-----------|
+| `new ExecutionController(expr, { maxSteps, maxNodes })` / `fromSource(src)` | Initial state only. Nothing is computed yet. |
+| `next()` | Advance one step. A step is computed the first time the cursor passes the end of the known history. |
+| `previous()`, `reset()`, `goTo(i)` | Move the cursor to an existing snapshot. Nothing is recomputed or reversed. |
+| `runToCompletion()` | Discover the rest of the trace (bounded by the limits) and move to the end. |
+| `peek()` | The step out of the current state, without moving. |
+| `index`, `knownSteps`, `history`, `current` | Cursor and recorded snapshots (`{ index, expr, source, step }`). |
+| `status`, `finished`, `outcome` | `running` / `done` / `error`. `outcome` holds the final value or a `LangError`. |
+| `snapshot()` | Plain object of all the above for UI state. |
+
+Limits: taking step `maxSteps + 1` (default 10,000) ends the trace with a RuntimeError,
+and so does growing past `maxNodes` (default 50,000). A program that needs exactly
+`maxSteps` steps still completes.
+
+### Node identity across steps
+
+- The nodes that make up a redex disappear. Its replacement either reuses an existing
+  subtree (the lambda body after beta, the chosen `if` branch, the list after `fold-step`)
+  or is a new node with a fresh id (computed numbers and booleans, new applications).
+- The first substituted copy of an argument keeps its ids. Later copies get fresh ids.
+- A `SmallStepReducer` instance never reissues an id, so the UI can safely use ids as
+  React keys or animation identities across a whole trace.
 
 ## Decisions
 

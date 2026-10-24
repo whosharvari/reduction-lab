@@ -197,7 +197,7 @@ function undefinedVariable(name: string, env: Environment, span: Span): LangErro
   return nameError(`Undefined variable '${name}'.${hint}`, span);
 }
 
-function closestName(name: string, candidates: string[]): string | undefined {
+export function closestName(name: string, candidates: string[]): string | undefined {
   let best: string | undefined;
   let bestDistance = Math.max(1, Math.floor(name.length / 3)) + 1;
   for (const candidate of candidates) {
