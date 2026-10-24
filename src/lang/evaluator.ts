@@ -5,7 +5,7 @@
  * function is evaluated before the argument; in a binary operation the left
  * operand before the right. `&&`, `||` and `if` evaluate only what they need.
  *
- * This is the *reference semantics*. The Phase 2 small-step reducer must reach
+ * This is the *reference semantics*. The small-step reducer (reduction/) must reach
  * the same final value for every program (see src/lang/reduction/types.ts).
  */
 import type { ArithmeticOperator, Binary, Expr } from './ast';

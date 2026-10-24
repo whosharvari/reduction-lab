@@ -244,6 +244,24 @@ describe('accessibility', () => {
     expect(screen.getByRole('button', { name: 'Map, then fold (composition)' })).toBeTruthy();
   });
 
+  it('the next-redex highlight stays visible inside a just-rewritten region', async () => {
+    // Regression (demo review): when the previous step's replacement contains the next redex,
+    // the green "just rewritten" style used to hide the amber "reduces next" style.
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const css = readFileSync(resolve(process.cwd(), 'src/app/styles.css'), 'utf8');
+    const changed = css.indexOf('.m-changed {');
+    const both = css.indexOf('.m-changed.m-redex');
+    expect(both).toBeGreaterThan(changed);
+    expect(css.slice(both, css.indexOf('}', both))).toMatch(/var\(--redex-bg\)/);
+    // And both marks really co-occur in the rendered DOM (fold step 5).
+    render(<App />);
+    chooseExample('Fold');
+    for (let i = 0; i < 5; i++) fireEvent.click(button(/Next step/));
+    const stage = screen.getByRole('group', { name: 'Expression being reduced' });
+    expect(stage.querySelector('.m-changed.m-redex')?.textContent).toBeTruthy();
+  });
+
   it('every button has an accessible name', () => {
     render(<App />);
     for (const b of screen.getAllByRole('button')) expect((b.textContent ?? '').trim() || b.getAttribute('aria-label')).toBeTruthy();

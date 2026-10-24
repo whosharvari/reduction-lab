@@ -345,6 +345,8 @@ h1 { margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -0.015em; }
 .m-changed { background: var(--changed-bg); box-shadow: inset 0 -2px 0 var(--changed); }
 .m-focus { outline: 1px dashed var(--accent-strong); outline-offset: 2px; border-radius: 2px; }
 .m-error { background: var(--error-bg); box-shadow: inset 0 -2px 0 var(--error); }
+/* The next redex often sits inside what the previous step produced; keep it visible. */
+.m-changed.m-redex { background: var(--redex-bg); box-shadow: inset 0 -2px 0 var(--redex); }
 
 .code-redex { padding: 1px 4px; border-radius: 4px; background: var(--redex-bg); }
 .code-changed { padding: 1px 4px; border-radius: 4px; background: var(--changed-bg); }

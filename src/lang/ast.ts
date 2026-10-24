@@ -1,7 +1,7 @@
 /**
  * Abstract syntax tree.
  *
- * Design constraints (they matter for the small-step engine in Phase 2):
+ * Design constraints (they matter for the small-step reducer in reduction/):
  *  - Nodes are plain, immutable, JSON-serialisable objects discriminated by `kind`.
  *  - Every node has a numeric `id` (unique within one tree) so the UI can track
  *    "the same" node across rewrites and highlight it, and a `span` pointing back
