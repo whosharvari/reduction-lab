@@ -1,0 +1,115 @@
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --text: #1d1d1f;
+  --muted: #6b6b70;
+  --border: #dcdcd8;
+  --accent: #5b4bdb;
+  --accent-text: #ffffff;
+  --error-bg: #fdecec;
+  --error-text: #9b1c1c;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141416;
+    --surface: #1d1d20;
+    --text: #ececef;
+    --muted: #9a9aa3;
+    --border: #34343a;
+    --accent: #8f83ff;
+    --accent-text: #0d0d10;
+    --error-bg: #3a1a1c;
+    --error-text: #ffb4b4;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
+.tagline { margin: 4px 0 0; color: var(--muted); }
+
+.examples { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); }
+
+.editor-label { font-size: 14px; color: var(--muted); }
+kbd { font-family: var(--mono); font-size: 12px; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+
+.editor {
+  width: 100%;
+  font: 15px/1.6 var(--mono);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+.editor:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.run {
+  align-self: flex-start;
+  background: var(--accent);
+  color: var(--accent-text);
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 20px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.output {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-x: auto;
+}
+.row { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.label { min-width: 80px; font-size: 13px; color: var(--muted); }
+code { font-family: var(--mono); font-size: 15px; }
+.value { font-weight: 600; font-size: 18px; }
+
+.error {
+  margin: 0;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--error-bg);
+  color: var(--error-text);
+  font: 14px/1.5 var(--mono);
+  white-space: pre;
+  overflow-x: auto;
+}
